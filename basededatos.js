@@ -1,18 +1,20 @@
 const mysql = require('mysql');
 const util = require('util');
+const wordPressDataBase = 'elquindiano';
+const elQuindianoDataBase = 'elquindi_quindiano';
 
 const elquindianoConnection = mysql.createConnection({
   host: 'localhost',
   user: 'root',
   password: '',
-  database: 'elquindiano'
+  database: wordPressDataBase
 });
 
 const elquindi_quindianoConnection = mysql.createConnection({
   host: 'localhost',
   user: 'root',
   password: '',
-  database: 'elquindi_quindiano'
+  database: elQuindianoDataBase
 });
 
 // Promisify the connection and query functions
@@ -25,7 +27,6 @@ const normalizeTitle = (title) => {
   return title.toLowerCase().trim();
 }
 
-
 const updateDatabase = async () => {
   try {
     await elquindianoConnection.connect();
@@ -34,22 +35,30 @@ const updateDatabase = async () => {
     await elquindi_quindianoConnection.connect();
     console.log('Conectado a la base de datos elquindi_quindiano');
 
-    const rows1 = await elquindi_quindianoConnection.query("SELECT title AS titulo, author_id AS id_columnista FROM articles");
-    const rows2 = await elquindianoConnection.query("SELECT post_title AS titulo, post_author AS id_columnista FROM wp_post");
+    const articlesFromElQuindiano = await elquindi_quindianoConnection.query("SELECT title AS titulo, article_id AS id_articulo FROM info_articles");
+    const postsFromWordPress = await elquindianoConnection.query("SELECT post_title AS titulo, post_author AS id_columnista FROM wp_post");
+    const articleInfoFromElQuindiano = await elquindi_quindianoConnection.query("SELECT id AS id_articulo, user_id AS escritor_id FROM articles");
 
-    console.log(rows1);
-    console.log(rows2);
+    let matchedArticleTitle;//titulo de id repetido 
+    let matchedArticleId; //id del articulo repetido 
+    let matchedWriterId;//id del escritor 
 
-    for (let row1 of rows1) {
-      let match = rows2.find((row2) => normalizeTitle(row1.titulo) === normalizeTitle(row2.titulo));
-      if (match) {
-        await elquindianoConnection.query("UPDATE wp_post SET post_author = ? WHERE post_title = ?", [row1.id_columnista, match.titulo]);
-        console.log(`Se ha actualizado el ID del columnista para el artículo '${match.titulo}' en la base de datos 'elquindi_quindiano'.`);
+    for (let article of articlesFromElQuindiano) {
+      let matchingPost = postsFromWordPress.find((post) => normalizeTitle(article.titulo) === normalizeTitle(post.titulo));
+      if (matchingPost) {
+        matchedArticleTitle = article.titulo;
+        matchedArticleId = article.id_articulo;
+
+        let matchingArticleInfo = articleInfoFromElQuindiano.find((articleInfo) => articleInfo.id_articulo === matchedArticleId);
+        if (matchingArticleInfo) {
+          matchedWriterId = matchingArticleInfo.escritor_id;
+          break; //se sale del bucle cuando captura el id
+        }
       }
-    }   
+    }  
 
-    console.log(rows1);
-    console.log(rows2);
+
+    //se cierran las conexiones a las bases de datos
 
     elquindianoConnection.end();
     console.log('Conexión a la base de datos elquindiano cerrada');
